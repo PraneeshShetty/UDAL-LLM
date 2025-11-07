@@ -1,0 +1,177 @@
+// Prisma Schema for UDAL Waste Management System
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Administrative Hierarchy Models
+model ZillaPanchayat {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  state     String
+  district  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  blocks Block[]
+}
+
+model Block {
+  id              String   @id @default(cuid())
+  name            String
+  code            String   @unique
+  zillaPanchayat  ZillaPanchayat @relation(fields: [zillaId], references: [id])
+  zillaId         String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  gramPanchayats GramPanchayat[]
+}
+
+model GramPanchayat {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  block       Block    @relation(fields: [blockId], references: [id])
+  blockId     String
+  population  Int?
+  area        Float?   // in sq km
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  wards       Ward[]
+  collectors  Collector[]
+  estimations WasteEstimation[]
+}
+
+model Ward {
+  id              String         @id @default(cuid())
+  name            String
+  wardNumber      Int
+  gramPanchayat   GramPanchayat  @relation(fields: [panchayatId], references: [id])
+  panchayatId     String
+  households      Int?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  collectors      Collector[]
+  estimations     WasteEstimation[]
+  collectionLogs  CollectionLog[]
+}
+
+// User/Collector Model
+model Collector {
+  id              String         @id @default(cuid())
+  name            String
+  phone           String         @unique
+  email           String?
+  role            String         @default("COLLECTOR") // COLLECTOR, SUPERVISOR, ADMIN
+  gramPanchayat   GramPanchayat  @relation(fields: [panchayatId], references: [id])
+  panchayatId     String
+  ward            Ward?          @relation(fields: [wardId], references: [id])
+  wardId          String?
+  active          Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  estimations     WasteEstimation[]
+  collectionLogs  CollectionLog[]
+}
+
+// Waste Estimation Model (Core Feature)
+model WasteEstimation {
+  id                    String         @id @default(cuid())
+  
+  // Location
+  gramPanchayat         GramPanchayat  @relation(fields: [panchayatId], references: [id])
+  panchayatId           String
+  ward                  Ward           @relation(fields: [wardId], references: [id])
+  wardId                String
+  latitude              Float?
+  longitude             Float?
+  address               String?
+  
+  // Collection Info
+  collector             Collector      @relation(fields: [collectorId], references: [id])
+  collectorId           String
+  collectionDate        DateTime       @default(now())
+  
+  // Image Data
+  imageUrl              String         // Path to stored image
+  imageName             String
+  imageSize             Int            // in bytes
+  
+  // Container Info
+  containerType         String?        // bin, bag, pile, etc.
+  containerVolumeLiters Float?
+  
+  // AI Estimation Results
+  estimatedWeightKg     Float
+  estimatedVolumeLiters Float
+  materialType          String         // mixed_msw, plastic, paper, etc.
+  densityKgPerL         Float
+  
+  // Metadata from AI
+  fullnessPercent       Float?
+  moistureLevel         String?        // dry, moist, wet
+  contaminationLevel    Float?         // 0-1
+  imageQuality          String?        // good, medium, poor
+  confidence            Float          // 0-1
+  aiReasoning           String?
+  
+  // Status
+  status                String         @default("PENDING") // PENDING, VERIFIED, REJECTED
+  verifiedBy            String?
+  verifiedAt            DateTime?
+  notes                 String?
+  
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  @@index([panchayatId, collectionDate])
+  @@index([wardId, collectionDate])
+  @@index([collectorId])
+}
+
+// Collection Schedule & Logs
+model CollectionLog {
+  id              String    @id @default(cuid())
+  ward            Ward      @relation(fields: [wardId], references: [id])
+  wardId          String
+  collector       Collector @relation(fields: [collectorId], references: [id])
+  collectorId     String
+  scheduledDate   DateTime
+  completedDate   DateTime?
+  status          String    @default("SCHEDULED") // SCHEDULED, IN_PROGRESS, COMPLETED, MISSED
+  householdsCovered Int?
+  totalWeightKg   Float?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([wardId, scheduledDate])
+}
+
+// Bin/Container Registry
+model Container {
+  id              String   @id @default(cuid())
+  type            String   // 60L_bin, 120L_bin, 240L_bin, bag, etc.
+  volumeLiters    Float
+  material        String?  // plastic, metal
+  condition       String   @default("GOOD") // GOOD, FAIR, POOR
+  location        String?
+  latitude        Float?
+  longitude       Float?
+  qrCode          String?  @unique
+  rfidTag         String?  @unique
+  assignedTo      String?  // household/institution
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
