@@ -231,10 +231,26 @@ ${containerVolumeLiters ? `- Known container volume: ${containerVolumeLiters} li
 
   } catch (error: any) {
     console.error("Waste estimation error:", error);
+    
+    // Better error messages for debugging
+    let errorMessage = "Failed to process waste estimation";
+    if (error?.message) {
+      if (error.message.includes("DATABASE_URL")) {
+        errorMessage = "Database connection error. Please check environment variables.";
+      } else if (error.message.includes("Gemini") || error.message.includes("API")) {
+        errorMessage = "AI API error. Please check GOOGLE_API_KEY.";
+      } else if (error.message.includes("Prisma")) {
+        errorMessage = "Database query error. Data might not be seeded.";
+      } else {
+        errorMessage = `Error: ${error.message}`;
+      }
+    }
+    
     return NextResponse.json(
       { 
-        error: "Failed to process waste estimation", 
-        details: error?.message || "Unknown error" 
+        success: false,
+        error: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? error?.stack : undefined
       },
       { status: 500 }
     );
