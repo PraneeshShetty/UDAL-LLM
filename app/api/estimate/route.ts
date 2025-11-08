@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { geminiModel, MATERIAL_DENSITIES } from "@/lib/gemini";
 import { prisma } from "@/lib/prisma";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
-import { existsSync } from "fs";
 
 // Estimation result from Gemini
 interface GeminiEstimation {
@@ -92,26 +89,15 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    // Save image to disk
+    // Convert image to base64 for Gemini (no file system writes in serverless)
     const bytes = await imageFile.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    
-    // Create uploads directory if it doesn't exist
-    const uploadDir = path.join(process.cwd(), "public", "uploads", "waste-images");
-    if (!existsSync(uploadDir)) {
-      await mkdir(uploadDir, { recursive: true });
-    }
-
-    const timestamp = Date.now();
-    const filename = `${timestamp}-${imageFile.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
-    const filepath = path.join(uploadDir, filename);
-    await writeFile(filepath, buffer);
-
-    const imageUrl = `/uploads/waste-images/${filename}`;
-
-    // Prepare image for Gemini
     const base64Image = buffer.toString("base64");
     const mimeType = imageFile.type || "image/jpeg";
+    
+    // Generate a unique identifier for this image (without saving to disk)
+    const timestamp = Date.now();
+    const imageUrl = `data:${mimeType};base64,${base64Image.substring(0, 100)}...`; // Store preview only
 
     // Create prompt for Gemini
     const prompt = `
